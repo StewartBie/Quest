@@ -195,8 +195,17 @@ std::vector<dtype_out> selected_single_mha(const std::vector<dtype_in>& q,
 		GROUP_SIZE,
 		{SWITCH_LAYOUT(
 			kv_layout, KV_LAYOUT, {SWITCH_HEAD_DIM(head_dim, HEAD_DIM, {
-				tensor_info_t<KV_LAYOUT, GROUP_SIZE, HEAD_DIM> info(qo_len, kv_len, num_kv_heads);
-				for(size_t qo_head_idx = 0; qo_head_idx < info.get_num_qo_heads(); ++qo_head_idx) {
+				// Compute CPU reference offsets directly to avoid NVCC rewriting
+				// local size_t constants into invalid host template arguments.
+				auto qo_offset = [&](size_t seq, size_t head, size_t feat) {
+					return (seq * num_q_heads + head) * head_dim + feat;
+				};
+				auto kv_offset = [&](size_t seq, size_t head, size_t feat) {
+					return kv_layout == QKVLayout::kHND
+						? (head * kv_len + seq) * head_dim + feat
+						: (seq * num_kv_heads + head) * head_dim + feat;
+				};
+				for(size_t qo_head_idx = 0; qo_head_idx < num_q_heads; ++qo_head_idx) {
 					const size_t kv_head_idx = qo_head_idx / GROUP_SIZE;
 					for(size_t q_idx = 0; q_idx < qo_len; ++q_idx) {
 						float max_val = -5e4;
@@ -219,9 +228,9 @@ std::vector<dtype_out> selected_single_mha(const std::vector<dtype_in>& q,
 								case RotaryMode::kNone: {
 									for(size_t feat_idx = 0; feat_idx < head_dim; ++feat_idx) {
 										att[seq_idx_checker] +=
-											float(q[info.get_qo_elem_offset(
+											float(q[qo_offset(
 												q_idx, qo_head_idx, feat_idx)]) *
-											float(k[info.get_kv_elem_offset(
+											float(k[kv_offset(
 												kv_idx, kv_head_idx, feat_idx)]) *
 											sm_scale;
 									}
@@ -275,14 +284,14 @@ std::vector<dtype_out> selected_single_mha(const std::vector<dtype_in>& q,
 									++page_offset) {
 									size_t kv_idx = cur_page_start_seq_len + page_offset;
 									o_float +=
-										att[seq_idx_checker] * float(v[info.get_kv_elem_offset(
+										att[seq_idx_checker] * float(v[kv_offset(
 																   kv_idx, kv_head_idx, feat_idx)]);
 									++seq_idx_checker; // seq_len++
 								}
 							}
 							assert(seq_idx_checker ==
 								   selected_seq_len); // sanity-check for equal seq_len
-							o[info.get_qo_elem_offset(q_idx, qo_head_idx, feat_idx)] =
+							o[qo_offset(q_idx, qo_head_idx, feat_idx)] =
 								dtype_out(o_float);
 						}
 					}

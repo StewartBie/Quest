@@ -15,6 +15,20 @@ __pycache__/
 .Python
 *.pyc
 build/
+# CMake build variants and generated files
+build-*/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+compile_commands.json
+build.ninja
+.ninja_deps
+.ninja_log
+*.o
+*.obj
+*.a
 develop-eggs/
 dist/
 downloads/
@@ -183,3 +197,4 @@ evaluation/passkey/results
 evaluation/pg19/results
 
 *.egg-info/
+*.pdf

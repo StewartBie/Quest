@@ -7,9 +7,9 @@ name = "quest"
 version = "0.0.1"
 
 dependencies = [
-    "torch==2.5.0",
-    "torchaudio==2.5.0",
-    "torchvision==0.20.0",
+    "torch==2.7.1",
+    "torchaudio==2.7.1",
+    "torchvision==0.22.1",
     "transformers==4.45.2",
     "accelerate==1.0.1",
     "sentencepiece==0.2.0",
