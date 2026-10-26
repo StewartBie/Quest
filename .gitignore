@@ -1,5 +1,6 @@
 .DS_Store
 .vscode/
+nvidia-bug-report.log.gz
 plot/
 
 data/

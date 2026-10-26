@@ -178,8 +178,10 @@ std::vector<dtype_out> selected_single_mha(const std::vector<dtype_in>& q,
 	assert(qo_len <= kv_len);
 	assert(qo_len == 1); // Only for bsz == 1
 	assert(rotary_mode == RotaryMode::kNone); // No in-kernel RoPE
-	assert(num_q_heads == num_kv_heads &&
-		   num_q__heads == selected_page_last_len.size()); // No GQA for now
+	assert(num_q_heads == num_kv_heads); // No GQA for now
+	assert(num_kv_heads > 0 && page_size > 0);
+	assert(!selected_page_indice.empty() && selected_page_indice.size() % num_kv_heads == 0);
+	assert(seleted_page_last_len > 0 && seleted_page_last_len <= page_size);
 
 	// kv_len is the entire length of kv-cache
 	// selected_seq_len is the length of selected kv-cache

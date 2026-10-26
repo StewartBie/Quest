@@ -126,13 +126,15 @@ void _TestMaxPossibleKernelCorrectness(size_t seq_len,
 			thrust::raw_pointer_cast(o_device.data()),
 			num_qo_heads,
 			rotary_mode);
-	EXPECT_EQ(status, cudaSuccess) << "CUDA error: " + std::string(cudaGetErrorString(status));
+	ASSERT_EQ(status, cudaSuccess) << "CUDA error: " + std::string(cudaGetErrorString(status));
+	status = cudaDeviceSynchronize();
+	ASSERT_EQ(status, cudaSuccess) << cudaGetErrorString(status);
 	// compare result
 	thrust::host_vector<T> o_host = o_device;
 	size_t num_result_errors_atol_1e_3_rtol_1e_3 = 0;
 	bool nan_detected = false;
 	for(size_t i = 0; i < o_host.size(); ++i) {
-		if(std::isnan(float(o_host[i]))) {
+		if(!std::isfinite(float(o_host[i]))) {
 			nan_detected = true;
 		}
 		num_result_errors_atol_1e_3_rtol_1e_3 +=
@@ -171,4 +173,29 @@ void TestMaxPossibleKernelCorrectness() {
 
 TEST(FlashInferCorrectnessTest, TestMaxPossibleSampleKernelCorrectnessTestFP16) {
 	TestMaxPossibleKernelCorrectness<half>();
+}
+
+// Zero Q/K gives uniform attention; distinct V positions expose skipped pages
+// and the partially filled mandatory tail without a second attention routine.
+TEST(CPUReferenceTest, SelectedPagesAndPartialTail) {
+    constexpr size_t heads = 2, dim = 64, length = 7, page_size = 2;
+    for(auto layout : {QKVLayout::kHND, QKVLayout::kNHD}) {
+        std::vector<float> q(heads * dim, 0.f), k(length * heads * dim, 0.f);
+        std::vector<float> v(k.size());
+        for(size_t h = 0; h < heads; ++h)
+            for(size_t t = 0; t < length; ++t)
+                for(size_t d = 0; d < dim; ++d) {
+                    auto offset = layout == QKVLayout::kHND
+                        ? (h * length + t) * dim + d : (t * heads + h) * dim + d;
+                    v[offset] = float(100 * h + t);
+                }
+        // Head 0 reads positions 0,1,6; head 1 reads 4,5,6.
+        auto out = cpu_reference::selected_single_mha<float, float>(
+            q, k, v, {0, 3, 2, 3}, 1, 1, length, page_size, heads, heads, dim,
+            true, layout);
+        for(size_t d = 0; d < dim; ++d) {
+            EXPECT_NEAR(out[d], 7.f / 3.f, 1e-5);
+            EXPECT_NEAR(out[dim + d], 105.f, 1e-5);
+        }
+    }
 }
